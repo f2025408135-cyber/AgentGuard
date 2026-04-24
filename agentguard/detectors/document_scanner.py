@@ -216,9 +216,19 @@ class DocumentScanner:
         num_pages = len(reader.pages)
         logger.debug("PDF has %d page(s)", num_pages)
 
+        # SECURITY FIX: AG-DoS-002 (Adversarial Review 2025)
+        # Limit pages scanned to prevent resource exhaustion from huge PDFs
+        if num_pages > self._config.max_pdf_pages:
+            logger.warning(
+                "PDF has %d pages (max %d), scanning only first %d",
+                num_pages, self._config.max_pdf_pages, self._config.max_pdf_pages,
+            )
+
+        pages_to_scan = reader.pages[:self._config.max_pdf_pages]
+
         # --- 1. Extract text from ALL pages (including hidden layers) ------
         all_text_parts: list[str] = []
-        for page_num, page in enumerate(reader.pages):
+        for page_num, page in enumerate(pages_to_scan):
             try:
                 page_text = page.extract_text() or ""
                 all_text_parts.append(page_text)
@@ -445,7 +455,16 @@ class DocumentScanner:
             logger.debug("Error checking for VBA project in XLSX: %s", exc)
 
         # --- 2. Iterate ALL sheets including hidden ones -------------------
-        for sheet_name in wb.sheetnames:
+        # SECURITY FIX: AG-DoS-002 (Adversarial Review 2025)
+        # Limit sheets scanned to prevent resource exhaustion
+        sheet_names = wb.sheetnames[:self._config.max_excel_sheets]
+        if len(wb.sheetnames) > self._config.max_excel_sheets:
+            logger.warning(
+                "Excel has %d sheets (max %d), scanning only first %d",
+                len(wb.sheetnames), self._config.max_excel_sheets,
+                self._config.max_excel_sheets,
+            )
+        for sheet_name in sheet_names:
             ws = wb[sheet_name]
             is_hidden = ws.sheet_state == "hidden"
             is_very_hidden = ws.sheet_state == "veryHidden"
@@ -604,8 +623,19 @@ class DocumentScanner:
         # Fields to scan for injection patterns
         _TEXT_FIELDS = ("SUMMARY", "DESCRIPTION", "LOCATION", "COMMENT")
 
-        def _walk_component(component) -> None:
+        def _walk_component(component, event_count: list[int]) -> None:
             """Recursively walk iCalendar components."""
+            # SECURITY FIX: AG-DoS-002 (Adversarial Review 2025)
+            # Track event count to prevent resource exhaustion from huge calendars
+            if component.name == "VEVENT":
+                event_count[0] += 1
+                if event_count[0] > self._config.max_ics_events:
+                    logger.warning(
+                        "ICS has more than %d events, stopping scan",
+                        self._config.max_ics_events,
+                    )
+                    return
+
             for prop_name, prop_val in component.property_items():
                 prop_name_upper = prop_name.upper()
 
@@ -705,9 +735,9 @@ class DocumentScanner:
 
             # Recurse into sub-components
             for sub in component.subcomponents:
-                _walk_component(sub)
+                _walk_component(sub, event_count)
 
-        _walk_component(cal)
+        _walk_component(cal, [0])
         return signals
 
     # ------------------------------------------------------------------

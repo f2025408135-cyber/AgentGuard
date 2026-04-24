@@ -93,9 +93,10 @@ class TestTrustDecay:
     """Test trust decay across relay hops."""
 
     def test_trust_decay_per_hop(self, memory_tracker, config):
-        # With 3 hops, trust should decay by 3 * 0.1 = 0.3
+        # SECURITY FIX: AG-MP-001 — Exponential decay (0.5 ** hops)
+        # With 1 hop: trust = 0.9 * 0.5^1 = 0.45 (above min_trust 0.4)
         report = _make_report(TrustTier.GREEN, 0.9)
-        chain = ["agent_a", "agent_b", "agent_c"]
+        chain = ["agent_a"]
         entry = memory_tracker.write(
             key="hopped_key",
             value="relayed_data",
@@ -103,14 +104,29 @@ class TestTrustDecay:
             trust_report=report,
             chain_of_custody=chain,
         )
-        # effective_trust = 0.9 - 3*0.1 = 0.6
-        # 0.6 >= min_trust (0.4) → allowed
+        # effective_trust = 0.9 * 0.5 = 0.45
+        # 0.45 >= min_trust (0.4) → allowed
         assert entry is not None
-        assert entry.source_trust_score == pytest.approx(0.6, abs=0.01)
-        assert len(entry.chain_of_custody) == 3
+        assert entry.source_trust_score == pytest.approx(0.45, abs=0.01)
+        assert len(entry.chain_of_custody) == 1
+
+    def test_exponential_decay_3_hops_blocked(self, memory_tracker):
+        # With 3 hops: trust = 0.9 * 0.5^3 = 0.1125
+        # 0.1125 < min_trust (0.4) → blocked
+        report = _make_report(TrustTier.GREEN, 0.9)
+        chain = ["agent_a", "agent_b", "agent_c"]
+        entry = memory_tracker.write(
+            key="three_hop_key",
+            value="over_relayed",
+            source_url="https://example.com",
+            trust_report=report,
+            chain_of_custody=chain,
+        )
+        assert entry is None
 
     def test_many_hops_blocks_write(self, memory_tracker):
-        # With 10 hops: trust = 0.9 - 10*0.1 = -0.1 → clamped to 0.0
+        # With 10 hops: trust = 0.9 * 0.5^10 ≈ 0.000879
+        # 0.000879 < 0.4 → blocked
         report = _make_report(TrustTier.GREEN, 0.9)
         chain = [f"agent_{i}" for i in range(10)]
         entry = memory_tracker.write(
@@ -120,8 +136,6 @@ class TestTrustDecay:
             trust_report=report,
             chain_of_custody=chain,
         )
-        # effective_trust = max(0, 0.9 - 1.0) = 0.0
-        # 0.0 < 0.4 → blocked
         assert entry is None
 
 

@@ -120,9 +120,31 @@ class AgentGuard:
             FetchError: If the URL cannot be fetched.
             AgentGuardError: If scanning fails unexpectedly.
         """
+        # SECURITY FIX: AG-DoS (Adversarial Review 2025)
+        # Reject oversized URLs to prevent resource exhaustion
+        if len(url) > self.config.max_url_length:
+            raise AgentGuardError(
+                f"URL exceeds maximum length ({len(url)} > {self.config.max_url_length})"
+            )
+
         try:
             # Layer 1: Dual fetch (detection asymmetry defense)
             fetch_result = self.dual_fetcher.fetch(url)
+
+            # SECURITY FIX: AG-DoS (Adversarial Review 2025)
+            # Truncate oversized content to prevent memory exhaustion
+            if len(fetch_result.human_content) > self.config.max_content_length_bytes:
+                logger.warning(
+                    "Content too large (%d bytes, max %d), truncating for scan",
+                    len(fetch_result.human_content), self.config.max_content_length_bytes,
+                )
+                from agentguard.fetcher.dual_fetcher import DualFetchResult
+                fetch_result = DualFetchResult(
+                    human_content=fetch_result.human_content[:self.config.max_content_length_bytes],
+                    bot_content=fetch_result.bot_content[:self.config.max_content_length_bytes] if fetch_result.bot_content else None,
+                    asymmetry_detected=fetch_result.asymmetry_detected,
+                    asymmetry_score=fetch_result.asymmetry_score,
+                )
 
             # Extract visible text for semantic analysis
             visible_text = self.content_detector.extract_visible_text(
@@ -306,6 +328,15 @@ class AgentGuard:
             :class:`GuardedResponse` with trust assessment.
         """
         all_signals: list[DetectionSignal] = []
+
+        # SECURITY FIX: AG-DoS (Adversarial Review 2025)
+        # Truncate oversized text to prevent memory exhaustion
+        if len(text) > self.config.max_content_length_bytes:
+            logger.warning(
+                "Text too large (%d bytes, max %d), truncating for scan",
+                len(text), self.config.max_content_length_bytes,
+            )
+            text = text[:self.config.max_content_length_bytes]
 
         # Check for injection patterns in text
         try:

@@ -64,10 +64,20 @@ class SteganographyScanner:
 
         Returns an empty list for:
         * Images smaller than ``config.min_image_size_bytes``
+        * Images larger than ``config.max_image_size_bytes`` (AG-DoS-001)
         * Non-image data
         * Corrupt images
         """
         if len(image_bytes) < self._min_size:
+            return []
+
+        # SECURITY FIX: AG-DoS-001 (Adversarial Review 2025)
+        # Reject oversized images to prevent memory exhaustion attacks
+        if len(image_bytes) > self._config.max_image_size_bytes:
+            logger.warning(
+                "Image too large (%d bytes, max %d), skipping stego scan",
+                len(image_bytes), self._config.max_image_size_bytes,
+            )
             return []
 
         try:
@@ -149,7 +159,9 @@ class SteganographyScanner:
             pass
 
         # Download and scan each image
-        for img_url in image_urls[:20]:  # cap at 20 images to avoid abuse
+        # SECURITY FIX: AG-DoS (Adversarial Review 2025)
+        # Use configurable max_images_per_page instead of hardcoded 20
+        for img_url in image_urls[:self._config.max_images_per_page]:
             try:
                 img_resp = requests.get(
                     img_url,

@@ -6,11 +6,22 @@ comments, CSS-hidden text, aria-hidden attributes, zero-width characters,
 metadata attributes, and JavaScript injection vectors.
 
 Reference: Franklin et al. (2026). AI Agent Traps. SSRN 6372438.
+
+Security hardening (Adversarial Review 2025):
+    AG-CI-001: Unicode homoglyph bypass via NFKC normalization
+    AG-CI-002: Base64/URL encoding evasion via decoding layer
+    AG-CI-003: Fragmented injection via sliding-window comment analysis
+    AG-CI-004: CSS variable obfuscation via var() resolution
+    AG-CI-005: JavaScript dynamic string construction detection
+    AG-CI-006: SVG foreignObject namespace injection detection
 """
 
+import base64
 import logging
 import re
+import unicodedata
 from typing import Optional
+from urllib.parse import unquote
 
 from bs4 import BeautifulSoup, Tag
 
@@ -41,6 +52,23 @@ _HIDDEN_CSS_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"clip\s*:\s*rect\s*\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)", re.IGNORECASE),
 ]
 
+# SECURITY FIX: AG-CI-005 (Adversarial Review 2025)
+# Regex patterns for JavaScript dynamic string construction techniques
+_JS_DYNAMIC_STRING_PATTERNS: list[re.Pattern[str]] = [
+    # String.fromCharCode(...) calls
+    re.compile(r"String\s*\.\s*fromCharCode\s*\(\s*[\d,\s]+\s*\)", re.IGNORECASE),
+    # atob() base64 decode calls
+    re.compile(r"\batob\s*\(\s*[\"'][A-Za-z0-9+/=]+[\"']\s*\)", re.IGNORECASE),
+    # eval() with string concatenation or template literals
+    re.compile(r"\beval\s*\(\s*(?:[\"'][^\"']+[\"']\s*[+]\s*)+[\"'][^\"']*[\"']\s*\)", re.IGNORECASE),
+    # eval() with template literals
+    re.compile(r"\beval\s*\(\s*`[^`]*`\s*\)", re.IGNORECASE),
+    # btoa() / atob() chained with fromCharCode
+    re.compile(r"atob\s*\([^)]+\)\s*\.\s*split\s*\([^)]+\)", re.IGNORECASE),
+    # Char code array joined into string
+    re.compile(r"(?:\[|new\s+Array)\s*\s*[\d,\s]+\s*\]?\s*\.\s*map\s*\(\s*.*?String\s*\.\s*fromCharCode", re.IGNORECASE),
+]
+
 
 class ContentInjectionDetector:
     """
@@ -52,6 +80,14 @@ class ContentInjectionDetector:
     4. Zero-width Unicode characters
     5. Metadata / data-* attribute injection
     6. JavaScript injection vectors
+
+    Security-hardened with adversarial defenses (2025):
+    7. Unicode homoglyph normalization (AG-CI-001)
+    8. Base64/URL encoding evasion detection (AG-CI-002)
+    9. Fragmented injection across comments (AG-CI-003)
+    10. CSS custom property obfuscation resolution (AG-CI-004)
+    11. JavaScript dynamic string construction (AG-CI-005)
+    12. SVG foreignObject namespace injection (AG-CI-006)
     """
 
     def __init__(self, config: AgentGuardConfig) -> None:
@@ -62,18 +98,91 @@ class ContentInjectionDetector:
         ]
 
     # ------------------------------------------------------------------
+    # SECURITY FIX: Preprocessing helpers (AG-CI-001, AG-CI-002)
+    # ------------------------------------------------------------------
+
+    def _normalize_text(self, text: str) -> str:
+        """SECURITY FIX: AG-CI-001 (Adversarial Review 2025)
+
+        NFKC normalize to collapse Unicode homoglyphs. Cyrillic/Greek
+        characters that look identical to Latin (e.g., Cyrillic 'і' U+0456
+        vs Latin 'i') are normalized to their canonical Latin equivalents
+        before pattern matching, preventing homoglyph-based bypass.
+        """
+        if not text:
+            return text
+        try:
+            return unicodedata.normalize('NFKC', text)
+        except Exception:
+            return text
+
+    def _decode_payloads(self, text: str) -> str:
+        """SECURITY FIX: AG-CI-002 (Adversarial Review 2025)
+
+        Decode Base64 and URL-encoded payloads for scanning. Adversaries
+        encode injection keywords (e.g., 'ignore previous instructions'
+        -> 'aWdub3JlIHByZXZpb3Vz') to bypass static keyword detection.
+        This layer decodes common encodings before pattern matching.
+        """
+        if not text:
+            return text
+        decoded_parts: list[str] = [text]
+
+        try:
+            # Try base64 decode of suspicious-looking strings (20+ chars)
+            for match in re.finditer(r'[A-Za-z0-9+/]{20,}={0,2}', text):
+                try:
+                    candidate = match.group()
+                    decoded = base64.b64decode(candidate).decode('utf-8', errors='ignore')
+                    if decoded and any(c.isalpha() for c in decoded):
+                        decoded_parts.append(decoded)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # URL decode
+        try:
+            url_decoded = unquote(text)
+            if url_decoded != text:
+                decoded_parts.append(url_decoded)
+        except Exception:
+            pass
+
+        return '\n'.join(decoded_parts)
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def detect(self, html: str) -> list[DetectionSignal]:
-        """Run all six detection sub-checks and return collected signals."""
+        """Run all detection sub-checks and return collected signals."""
         signals: list[DetectionSignal] = []
+
+        # SECURITY FIX: AG-CI-001, AG-CI-002 (Adversarial Review 2025)
+        # Pre-process HTML with normalization and decoding before all checks.
+        # The preprocessed versions are passed to the new detection methods.
+        normalized_html = self._normalize_text(html)
+        decoded_html = self._decode_payloads(html)
+
+        # Original detection methods (existing, preserved intact)
         signals.extend(self._detect_html_comment_injection(html))
         signals.extend(self._detect_hidden_css_text(html))
         signals.extend(self._detect_aria_hidden(html))
         signals.extend(self._detect_zero_width_chars(html))
         signals.extend(self._detect_meta_data_injection(html))
         signals.extend(self._detect_js_injection_vectors(html))
+
+        # SECURITY FIX: New adversarial detection methods (2025)
+        signals.extend(self._detect_fragmented_injection(html))
+        signals.extend(self._detect_css_variable_obfuscation(html))
+        signals.extend(self._detect_js_dynamic_strings(html))
+        signals.extend(self._detect_svg_foreign_object(html))
+
+        # Additional scanning of normalized+decoded text for injection patterns
+        # This catches payloads that only become visible after preprocessing
+        signals.extend(self._scan_preprocessed_text(normalized_html, decoded_html))
+
         return signals
 
     def sanitize(self, html: str) -> str:
@@ -101,6 +210,11 @@ class ContentInjectionDetector:
                 style = el.get("style", "")
                 if re.search(r"display\s*:\s*none|visibility\s*:\s*hidden", style, re.IGNORECASE):
                     el.decompose()
+            # SECURITY FIX: AG-CI-006 (Adversarial Review 2025)
+            # Remove SVG foreignObject elements as potential injection vectors
+            for svg in soup.find_all("svg"):
+                for fo in svg.find_all("foreignobject"):
+                    fo.decompose()
             cleaned = str(soup)
         except Exception:
             pass  # Best-effort — return what we have
@@ -116,6 +230,11 @@ class ContentInjectionDetector:
             soup = BeautifulSoup(html, "lxml")
             for tag in soup.find_all(["script", "style"]):
                 tag.decompose()
+            # SECURITY FIX: AG-CI-006 (Adversarial Review 2025)
+            # Strip SVG foreignObject content as it can contain hidden HTML
+            for svg in soup.find_all("svg"):
+                for fo in svg.find_all("foreignobject"):
+                    fo.decompose()
             text = soup.get_text(separator=" ", strip=True)
         except Exception:
             text = html
@@ -124,7 +243,7 @@ class ContentInjectionDetector:
         return text
 
     # ------------------------------------------------------------------
-    # Detection methods
+    # Detection methods (original — preserved intact)
     # ------------------------------------------------------------------
 
     def _detect_html_comment_injection(self, html: str) -> list[DetectionSignal]:
@@ -453,6 +572,441 @@ class ContentInjectionDetector:
         return signals
 
     # ------------------------------------------------------------------
+    # SECURITY FIX: New adversarial detection methods (2025)
+    # ------------------------------------------------------------------
+
+    def _detect_fragmented_injection(self, html: str) -> list[DetectionSignal]:
+        """SECURITY FIX: AG-CI-003 (Adversarial Review 2025)
+
+        Detect injection split across multiple HTML comments or hidden
+        elements. Adversaries fragment payloads like:
+            <!-- ignore prev --> ... <!-- ious instructions -->
+        so that no single fragment matches any pattern. A sliding window
+        of 2-5 consecutive fragments is concatenated and checked.
+        """
+        signals: list[DetectionSignal] = []
+
+        try:
+            # Extract all HTML comments
+            fragments: list[str] = re.findall(r"<!--(.*?)-->", html, re.DOTALL)
+
+            # Also extract text from hidden elements (aria-hidden, display:none, etc.)
+            try:
+                soup = BeautifulSoup(html, "lxml")
+                for el in soup.find_all(attrs={"aria-hidden": "true"}):
+                    el_text = el.get_text(strip=True)
+                    if len(el_text) >= 3:
+                        fragments.append(el_text)
+                for el in soup.find_all(style=True):
+                    style = el.get("style", "")
+                    if any(p.search(style) for p in _HIDDEN_CSS_PATTERNS):
+                        el_text = el.get_text(strip=True)
+                        if len(el_text) >= 3:
+                            fragments.append(el_text)
+            except Exception:
+                pass
+
+            if len(fragments) < 2:
+                return signals
+
+            # Sliding window: concatenate consecutive fragments and check
+            # Window sizes 2 through 5
+            for window_size in range(2, min(6, len(fragments) + 1)):
+                for i in range(len(fragments) - window_size + 1):
+                    window_fragments = fragments[i:i + window_size]
+                    concatenated = " ".join(f.strip() for f in window_fragments)
+
+                    # Also normalize to catch homoglyph fragments
+                    normalized_concat = self._normalize_text(concatenated)
+
+                    matches = self._check_injection_patterns(normalized_concat)
+                    if matches:
+                        pattern_str, _ = matches[0]
+                        confidence = min(0.70 + (window_size * 0.05), 0.85)
+                        signals.append(DetectionSignal(
+                            trap_class=TrapClass.CONTENT_INJECTION,
+                            signal_name="fragmented_injection",
+                            confidence=confidence,
+                            evidence=f"Fragmented injection across {window_size} "
+                                     f"fragments: pattern {pattern_str!r} found "
+                                     f"in concatenated text: {concatenated[:300]!r}",
+                            raw_payload=concatenated[:500],
+                            detector="content_injection",
+                        ))
+
+        except Exception:
+            pass
+
+        return signals
+
+    def _detect_css_variable_obfuscation(self, html: str) -> list[DetectionSignal]:
+        """SECURITY FIX: AG-CI-004 (Adversarial Review 2025)
+
+        Detect and resolve CSS custom property (variable) obfuscation.
+        Adversaries use CSS variables to hide injection payloads:
+            :root { --secret: "ignore previous instructions"; }
+            .hidden { content: var(--secret); }
+        The var() references are resolved and the resolved values are
+        checked for injection patterns.
+        """
+        signals: list[DetectionSignal] = []
+
+        try:
+            soup = BeautifulSoup(html, "lxml")
+        except Exception:
+            return signals
+
+        try:
+            # Step 1: Collect all CSS custom property definitions from <style> blocks
+            css_vars: dict[str, str] = {}
+
+            for style_tag in soup.find_all("style"):
+                css_text = style_tag.get_text()
+
+                # Match CSS variable definitions: --name: value;
+                # Supports quoted and unquoted values
+                for var_match in re.finditer(
+                    r'(--[\w-]+)\s*:\s*(?:\"([^\"]*)\"|\'([^\']*)\'|([^;]*))\s*;',
+                    css_text,
+                ):
+                    var_name = var_match.group(1)
+                    # Extract value from whichever capture group matched
+                    var_value = (
+                        var_match.group(2)
+                        if var_match.group(2) is not None
+                        else var_match.group(3)
+                        if var_match.group(3) is not None
+                        else var_match.group(4)
+                    )
+                    if var_value:
+                        var_value = var_value.strip()
+                        css_vars[var_name] = var_value
+
+                # Also check inline style attributes for variable definitions
+                # (less common but possible)
+                for var_match in re.finditer(
+                    r'(--[\w-]+)\s*:\s*(?:\"([^\"]*)\"|\'([^\']*)\'|([^;]*))\s*;',
+                    css_text,
+                ):
+                    var_name = var_match.group(1)
+                    var_value = (
+                        var_match.group(2)
+                        if var_match.group(2) is not None
+                        else var_match.group(3)
+                        if var_match.group(3) is not None
+                        else var_match.group(4)
+                    )
+                    if var_value:
+                        var_value = var_value.strip()
+                        if var_name not in css_vars:
+                            css_vars[var_name] = var_value
+
+            if not css_vars:
+                return signals
+
+            # Step 2: Resolve CSS variables in all inline styles and content properties
+            for el in soup.find_all(True):
+                if not isinstance(el, Tag):
+                    continue
+
+                inline_style = el.get("style", "")
+                if not inline_style:
+                    continue
+
+                # Resolve var() references in the style string
+                resolved_style = self._resolve_css_variables(inline_style, css_vars)
+
+                # Check the resolved style for injection patterns
+                matches = self._check_injection_patterns(resolved_style)
+                if matches:
+                    pattern_str, _ = matches[0]
+                    tag_name = el.name
+                    signals.append(DetectionSignal(
+                        trap_class=TrapClass.CONTENT_INJECTION,
+                        signal_name="css_variable_obfuscation",
+                        confidence=0.80,
+                        evidence=f"CSS variable obfuscation on <{tag_name}>: "
+                                 f"resolved 'var()' to injection pattern "
+                                 f"{pattern_str!r}. Original: {inline_style[:200]!r} "
+                                 f"-> Resolved: {resolved_style[:200]!r}",
+                        raw_payload=resolved_style[:500],
+                        detector="content_injection",
+                    ))
+
+            # Step 3: Check CSS variable values directly for injection patterns
+            for var_name, var_value in css_vars.items():
+                normalized_value = self._normalize_text(var_value)
+                matches = self._check_injection_patterns(normalized_value)
+                if matches:
+                    pattern_str, _ = matches[0]
+                    signals.append(DetectionSignal(
+                        trap_class=TrapClass.CONTENT_INJECTION,
+                        signal_name="css_variable_definition_injection",
+                        confidence=0.75,
+                        evidence=f"CSS custom property {var_name} defined with "
+                                 f"injection pattern {pattern_str!r}: {var_value[:200]!r}",
+                        raw_payload=var_value,
+                        detector="content_injection",
+                    ))
+
+        except Exception:
+            pass
+
+        return signals
+
+    def _resolve_css_variables(
+        self, style_str: str, css_vars: dict[str, str]
+    ) -> str:
+        """SECURITY FIX: AG-CI-004 (Adversarial Review 2025)
+
+        Resolve CSS custom properties (--variable) in style strings.
+        Performs iterative resolution (up to 10 passes) to handle
+        nested variable references like var(--a) where --a: var(--b).
+        """
+        resolved = style_str
+        try:
+            # Iteratively resolve nested variable references (max 10 passes)
+            for _ in range(10):
+                new_resolved = resolved
+                for var_name, var_value in css_vars.items():
+                    new_resolved = new_resolved.replace(f'var({var_name})', var_value)
+                if new_resolved == resolved:
+                    break
+                resolved = new_resolved
+        except Exception:
+            pass
+        return resolved
+
+    def _detect_js_dynamic_strings(self, html: str) -> list[DetectionSignal]:
+        """SECURITY FIX: AG-CI-005 (Adversarial Review 2025)
+
+        Detect JavaScript dynamic string construction used for obfuscation.
+        Adversaries build injection strings at runtime to bypass static
+        analysis:
+            - String.fromCharCode(105,103,110,111,114,101) -> "ignore"
+            - atob("aWdub3JlIHByZXZpb3Vz") -> "ignore previous"
+            - eval() with string concatenation or template literals
+        """
+        signals: list[DetectionSignal] = []
+
+        try:
+            soup = BeautifulSoup(html, "lxml")
+        except Exception:
+            return signals
+
+        try:
+            for script in soup.find_all("script"):
+                js_text = script.string or ""
+                if not js_text or len(js_text) < 20:
+                    continue
+
+                for pattern in _JS_DYNAMIC_STRING_PATTERNS:
+                    for match in pattern.finditer(js_text):
+                        matched_str = match.group(0)
+
+                        # Try to evaluate/detect the resolved string for injection
+                        resolved = self._attempt_resolve_dynamic_string(matched_str)
+
+                        # Check both the raw pattern and any resolved value
+                        for check_text in (resolved, matched_str):
+                            if check_text and len(check_text) >= 5:
+                                norm_text = self._normalize_text(check_text)
+                                inj_matches = self._check_injection_patterns(norm_text)
+                                if inj_matches:
+                                    pattern_str, _ = inj_matches[0]
+                                    signals.append(DetectionSignal(
+                                        trap_class=TrapClass.CONTENT_INJECTION,
+                                        signal_name="js_dynamic_string_construction",
+                                        confidence=0.85,
+                                        evidence=f"JavaScript dynamic string construction "
+                                                 f"resolves to injection pattern "
+                                                 f"{pattern_str!r}. Raw: {matched_str[:200]!r}",
+                                        raw_payload=js_text[:500],
+                                        detector="content_injection",
+                                    ))
+                                    break
+                        else:
+                            # No injection pattern matched in resolved text, but
+                            # still flag the dynamic string construction as suspicious
+                            signals.append(DetectionSignal(
+                                trap_class=TrapClass.CONTENT_INJECTION,
+                                signal_name="js_dynamic_string_suspicious",
+                                confidence=0.55,
+                                evidence=f"JavaScript dynamic string construction "
+                                         f"detected (no injection pattern confirmed): "
+                                         f"{matched_str[:200]!r}",
+                                raw_payload=js_text[:500],
+                                detector="content_injection",
+                            ))
+
+        except Exception:
+            pass
+
+        return signals
+
+    def _attempt_resolve_dynamic_string(self, js_expr: str) -> str:
+        """SECURITY FIX: AG-CI-005 (Adversarial Review 2025)
+
+        Attempt to resolve common JavaScript dynamic string constructions
+        to their plaintext values. Returns the best-effort resolved string,
+        or the original expression if resolution fails.
+        """
+        try:
+            # Resolve String.fromCharCode(...)
+            fcc_match = re.search(
+                r'String\s*\.\s*fromCharCode\s*\(\s*([\d,\s]+)\s*\)',
+                js_expr, re.IGNORECASE,
+            )
+            if fcc_match:
+                char_codes = [
+                    int(c.strip())
+                    for c in fcc_match.group(1).split(',')
+                    if c.strip().isdigit()
+                ]
+                if char_codes:
+                    try:
+                        resolved = ''.join(chr(c) for c in char_codes)
+                        if resolved:
+                            return resolved
+                    except (ValueError, OverflowError):
+                        pass
+
+            # Resolve atob(...) — base64 decode
+            atob_match = re.search(
+                r'\batob\s*\(\s*[\"\'`]([A-Za-z0-9+/=]+)[\"\'`]\s*\)',
+                js_expr, re.IGNORECASE,
+            )
+            if atob_match:
+                try:
+                    decoded = base64.b64decode(atob_match.group(1)).decode(
+                        'utf-8', errors='ignore'
+                    )
+                    if decoded and any(c.isalpha() for c in decoded):
+                        return decoded
+                except Exception:
+                    pass
+
+        except Exception:
+            pass
+
+        return js_expr
+
+    def _detect_svg_foreign_object(self, html: str) -> list[DetectionSignal]:
+        """SECURITY FIX: AG-CI-006 (Adversarial Review 2025)
+
+        Detect injection via SVG foreignObject elements. The SVG
+        foreignObject element allows embedding arbitrary HTML content
+        within SVG, creating a hidden injection scope that is often
+        invisible to standard HTML parsers and security scanners.
+
+        Any foreignObject element is flagged as suspicious (confidence
+        0.60), and if its content matches injection patterns the
+        confidence is elevated to 0.90.
+        """
+        signals: list[DetectionSignal] = []
+
+        try:
+            soup = BeautifulSoup(html, "lxml")
+        except Exception:
+            return signals
+
+        try:
+            for svg in soup.find_all("svg"):
+                for fo in svg.find_all("foreignobject"):
+                    # Extract text content from the foreignObject
+                    fo_text = fo.get_text(separator=" ", strip=True)
+
+                    # Check the inner HTML content (not just text) for patterns
+                    fo_html = str(fo)
+                    normalized_fo_html = self._normalize_text(fo_html)
+                    normalized_fo_text = self._normalize_text(fo_text)
+
+                    # Check for injection patterns in foreignObject content
+                    injection_found = False
+                    pattern_str = ""
+
+                    # Check text content
+                    if fo_text and len(fo_text) >= 5:
+                        text_matches = self._check_injection_patterns(normalized_fo_text)
+                        if text_matches:
+                            pattern_str, _ = text_matches[0]
+                            injection_found = True
+
+                    # Check HTML content (catches patterns in attributes, tags)
+                    if not injection_found and len(fo_html) >= 10:
+                        html_matches = self._check_injection_patterns(normalized_fo_html)
+                        if html_matches:
+                            pattern_str, _ = html_matches[0]
+                            injection_found = True
+
+                    if injection_found:
+                        signals.append(DetectionSignal(
+                            trap_class=TrapClass.CONTENT_INJECTION,
+                            signal_name="svg_foreign_object_injection",
+                            confidence=0.90,
+                            evidence=f"SVG foreignObject contains injection pattern "
+                                     f"{pattern_str!r}: {fo_text[:200]!r}",
+                            raw_payload=fo_html[:500],
+                            detector="content_injection",
+                        ))
+                    else:
+                        # Flag ANY foreignObject as suspicious — it's a potent
+                        # attack vector even without confirmed injection patterns
+                        signals.append(DetectionSignal(
+                            trap_class=TrapClass.CONTENT_INJECTION,
+                            signal_name="svg_foreign_object_suspicious",
+                            confidence=0.60,
+                            evidence=f"SVG foreignObject element detected (potential "
+                                     f"hidden injection scope). Content: "
+                                     f"{fo_text[:200]!r}",
+                            raw_payload=fo_html[:500],
+                            detector="content_injection",
+                        ))
+
+        except Exception:
+            pass
+
+        return signals
+
+    def _scan_preprocessed_text(
+        self, normalized_html: str, decoded_html: str
+    ) -> list[DetectionSignal]:
+        """SECURITY FIX: AG-CI-001, AG-CI-002 (Adversarial Review 2025)
+
+        Scan the preprocessed (normalized + decoded) text for injection
+        patterns. This catches payloads that only become visible after
+        Unicode normalization or encoding decode, but were not caught
+        by the individual detection methods.
+        """
+        signals: list[DetectionSignal] = []
+
+        try:
+            for label, preprocessed in (
+                ("normalized", normalized_html),
+                ("decoded", decoded_html),
+            ):
+                if not preprocessed:
+                    continue
+
+                matches = self._check_injection_patterns(preprocessed)
+                if matches:
+                    pattern_str, confidence = matches[0]
+                    signals.append(DetectionSignal(
+                        trap_class=TrapClass.CONTENT_INJECTION,
+                        signal_name=f"preprocessed_{label}_text_injection",
+                        confidence=min(confidence, 0.75),
+                        evidence=f"Injection pattern {pattern_str!r} found "
+                                 f"after {label} preprocessing: "
+                                 f"{preprocessed[:200]!r}",
+                        raw_payload=preprocessed[:500],
+                        detector="content_injection",
+                    ))
+        except Exception:
+            pass
+
+        return signals
+
+    # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
@@ -462,11 +1016,19 @@ class ContentInjectionDetector:
         """
         Check *text* against all compiled injection patterns.
 
+        SECURITY FIX: AG-CI-001 (Adversarial Review 2025)
+        Text is NFKC-normalized before pattern matching to collapse
+        Unicode homoglyphs (e.g., Cyrillic 'і' -> Latin 'i').
+
         Returns a list of ``(matched_pattern_string, confidence)`` tuples.
         """
+        # SECURITY FIX: AG-CI-001 (Adversarial Review 2025)
+        # Normalize text before all pattern matching to defeat homoglyph bypass
+        normalized_text = self._normalize_text(text)
+
         results: list[tuple[str, float]] = []
         for pattern in self._injection_patterns:
-            match = pattern.search(text)
+            match = pattern.search(normalized_text)
             if match:
                 matched_str = match.group(0)
                 results.append((matched_str, 0.8))

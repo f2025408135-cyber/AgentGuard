@@ -88,10 +88,38 @@ class MemoryProvenanceTracker:
         content_hash = hashlib.sha256(str(value).encode()).hexdigest()
         source_trust = trust_report.composite_score
 
-        # Apply per-hop trust decay
+        # SECURITY FIX: AG-MP-001 (Adversarial Review 2025)
+        # Detect circular chains that could renew trust by looping
+        if chain_of_custody:
+            seen: set[str] = set()
+            for hop in chain_of_custody:
+                if hop in seen:
+                    logger.warning(
+                        "Circular chain detected in memory provenance: %s", hop,
+                    )
+                    return None  # Block write — circular reference
+                seen.add(hop)
+
+        # SECURITY FIX: AG-MP-001 (Adversarial Review 2025)
+        # Block writes with excessively long chains to prevent decay evasion
         hop_count = len(chain_of_custody) if chain_of_custody else 0
-        effective_trust = source_trust - (hop_count * self._config.trust_decay_per_hop)
-        effective_trust = max(0.0, effective_trust)  # clamp to zero
+        if hop_count > self._config.max_trust_hops:
+            logger.warning(
+                "Chain too long (%d hops, max=%d) — blocking write for key=%r",
+                hop_count,
+                self._config.max_trust_hops,
+                key,
+            )
+            return None
+
+        # SECURITY FIX: AG-MP-001 (Adversarial Review 2025)
+        # Exponential decay instead of linear — each hop halves the trust
+        effective_trust = source_trust * (0.5 ** hop_count)
+
+        # SECURITY FIX: AG-MP-001 (Adversarial Review 2025)
+        # Hard trust floor — trust cannot go below 0.02 regardless of decay,
+        # but writes are still blocked if below min_trust_to_write_memory
+        effective_trust = max(effective_trust, 0.02)
 
         # Block write if below minimum threshold
         if effective_trust < self._config.min_trust_to_write_memory:

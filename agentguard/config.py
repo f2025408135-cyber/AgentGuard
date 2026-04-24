@@ -65,10 +65,21 @@ class AgentGuardConfig:
     lsb_chi_square_threshold: float = 0.05  # p-value below this = suspicious
     min_image_size_bytes: int = 1024  # skip tiny images
 
+    # SECURITY FIX: AG-DoS (Adversarial Review 2025)
+    # Resource exhaustion limits — Steganography
+    max_image_size_bytes: int = 5 * 1024 * 1024  # 5MB max per image
+    max_images_per_page: int = 10  # max images to scan from a single page
+
     # --- Layer 5: Documents ---
     scan_pdf: bool = True
     scan_excel: bool = True
     scan_ics: bool = True
+
+    # SECURITY FIX: AG-DoS-002 (Adversarial Review 2025)
+    # Resource exhaustion limits — Documents
+    max_pdf_pages: int = 100
+    max_excel_sheets: int = 20
+    max_ics_events: int = 500
 
     # --- Layer 6: TrustScorer ---
     scorer_weights: dict[str, float] = field(default_factory=lambda: {
@@ -119,9 +130,17 @@ class AgentGuardConfig:
     min_trust_to_write_memory: float = 0.4
     quarantine_threshold: float = 0.2
 
+    # SECURITY FIX: AG-DoS (Adversarial Review 2025)
+    # Memory limits
+    max_memory_entries: int = 10000
+    max_message_chain_length: int = 50
+
     # --- Layer 10: AgentTrustValidator ---
+    # SECURITY FIX: AG-CFG-001 (Adversarial Review 2025)
+    # Empty default means auto-generated secret will be used (see AgentTrustValidator).
+    # Set AGENTGUARD_HMAC_SECRET env var for production.
     hmac_secret: str = field(default_factory=lambda: os.environ.get(
-        "AGENTGUARD_HMAC_SECRET", "CHANGE_ME_IN_PRODUCTION"
+        "AGENTGUARD_HMAC_SECRET", ""
     ))
     require_signatures: bool = False  # set True in production
     max_trust_hops: int = 5
@@ -136,3 +155,9 @@ class AgentGuardConfig:
     # --- General ---
     verify_ssl: bool = True  # set False for testing with self-signed certs
     request_timeout: int = 10  # HTTP request timeout in seconds
+
+    # SECURITY FIX: AG-DoS (Adversarial Review 2025)
+    # General resource limits
+    max_content_length_bytes: int = 10 * 1024 * 1024  # 10MB max content size
+    max_url_length: int = 2048  # max URL length
+    scan_timeout_seconds: int = 30  # per-scan timeout

@@ -8,19 +8,32 @@ and produces a human-readable :class:`TrustReport`.
 Scoring algorithm
 -----------------
 1.  Start with ``base_score = 1.0``.
-2.  For every :class:`DetectionSignal` subtract
-    ``signal.confidence * weight(signal.detector)``.
-3.  If asymmetry was detected, subtract an additional
+2.  For every :class:`DetectionSignal`, group by detector.  Signals
+    from the *same* detector contribute only their **maximum** confidence
+    (preventing signal-amplification reversal attacks), while signals
+    from *different* detectors stack fully.  Each accumulated penalty is
+    scaled through a **non-linear** curve so that additional signals cost
+    progressively more, making threshold calibration infeasible.
+3.  Signals with confidence > 0.85 receive a 1.5× asymmetric weight
+    boost — high-confidence detections are disproportionately dangerous.
+4.  If asymmetry was detected, subtract an additional
     ``asymmetry_score * weight("asymmetry")``.
-4.  Clamp to ``[0.0, 1.0]``.
-5.  **Multi-signal amplification**: when 3+ signals come from *different*
-    trap classes, the total accumulated penalty is scaled by ``1.3×``.
-6.  Map the resulting score to a tier.
+5.  Clamp to ``[0.0, 1.0]``.
+6.  **Conditional multi-signal amplification**: amplification is applied
+    ONLY when signals originate from 3+ *different* trap classes AND at
+    least 2 of those signals carry confidence > 0.7.  This prevents an
+    attacker from triggering amplification with low-confidence noise.
+7.  Map the resulting score to a tier using **jittered thresholds**
+    (small random perturbation per :class:`TrustScorer` instance) to
+    defeat precise calibration attacks.
 
 Reference: Franklin et al. (2026). AI Agent Traps. SSRN 6372438.
 """
 
 import json
+import math
+import random
+from collections import defaultdict
 from datetime import datetime
 from typing import Optional
 
@@ -34,6 +47,21 @@ _TIER_ACTIONS: dict[TrustTier, str] = {
     TrustTier.RED: "BLOCK",
     TrustTier.QUARANTINE: "QUARANTINE",
 }
+
+# SECURITY FIX: AG-TS-001 (Adversarial Review 2025)
+# Confidence threshold above which the asymmetric 1.5× weight is applied.
+_HIGH_CONFIDENCE_THRESHOLD: float = 0.85
+_HIGH_CONFIDENCE_WEIGHT_MULTIPLIER: float = 1.5
+
+# SECURITY FIX: AG-TS-002 (Adversarial Review 2025)
+# Minimum number of distinct trap classes required for amplification.
+_AMPLIFICATION_MIN_TRAP_CLASSES: int = 3
+# Minimum number of high-confidence signals (conf > 0.7) among the
+# distinct trap classes required for amplification to kick in.
+_AMPLIFICATION_MIN_HIGH_CONF_COUNT: int = 2
+_AMPLIFICATION_HIGH_CONF_THRESHOLD: float = 0.7
+# Amplification factor applied when all conditions are met.
+_AMPLIFICATION_FACTOR: float = 1.3
 
 
 class TrustScorer:
@@ -50,6 +78,17 @@ class TrustScorer:
 
     def __init__(self, config: AgentGuardConfig) -> None:
         self._config = config
+
+        # SECURITY FIX: AG-TS-001 (Adversarial Review 2025)
+        # Threshold jitter — small random variation per instantiation
+        # prevents attackers from precisely calibrating payloads to
+        # sit just above a known threshold boundary.
+        self._red_threshold: float = config.red_threshold * (
+            1.0 + random.uniform(-0.05, 0.05)
+        )
+        self._yellow_threshold: float = config.yellow_threshold * (
+            1.0 + random.uniform(-0.05, 0.05)
+        )
 
     # ------------------------------------------------------------------
     # Core scoring
@@ -80,29 +119,80 @@ class TrustScorer:
         """
         base_score = 1.0
         total_penalty = 0.0
-        trap_classes_seen: set[str] = set()
 
-        # --- 2. Accumulate per-signal penalties ----------------------------
+        # SECURITY FIX: AG-TS-001 (Adversarial Review 2025)
+        # --- Signal clustering by detector ---
+        # Group signals by detector name.  If the same detector fires
+        # multiple times, only the signal with the *highest* effective
+        # confidence contributes (avoids signal-amplification reversal
+        # where an attacker triggers many low-confidence false positives
+        # on one detector).  Signals from *different* detectors stack
+        # normally.
+        detector_groups: dict[str, list[DetectionSignal]] = defaultdict(list)
         for signal in signals:
-            weight = self._config.scorer_weights.get(signal.detector, 0.1)
-            penalty = signal.confidence * weight
-            total_penalty += penalty
-            trap_classes_seen.add(signal.trap_class.value)
+            detector_groups[signal.detector].append(signal)
 
-        # --- 3. Asymmetry penalty -----------------------------------------
+        # Track trap classes and high-confidence signals for amplification
+        trap_classes_seen: set[str] = set()
+        # Map each trap class to the maximum confidence seen from that class
+        trap_class_max_confidence: dict[str, float] = {}
+
+        # Accumulate per-signal penalties using clustered signals
+        signal_index = 0  # monotonic counter for non-linear scaling
+        for _detector, detector_signals in detector_groups.items():
+            # Use the signal with the highest effective confidence from
+            # this detector group.
+            best_signal = max(detector_signals, key=lambda s: s.confidence)
+
+            # SECURITY FIX: AG-TS-001 (Adversarial Review 2025)
+            # Asymmetric penalty for high-confidence signals.
+            effective_confidence = best_signal.confidence
+            if effective_confidence > _HIGH_CONFIDENCE_THRESHOLD:
+                effective_confidence *= _HIGH_CONFIDENCE_WEIGHT_MULTIPLIER
+
+            weight = self._config.scorer_weights.get(best_signal.detector, 0.1)
+            base_penalty = effective_confidence * weight
+
+            # SECURITY FIX: AG-TS-001 (Adversarial Review 2025)
+            # Non-linear penalty scaling — each additional signal from a
+            # distinct detector costs more than the last, making total
+            # penalties unpredictable for an attacker.
+            penalty = self._compute_penalty(base_penalty, signal_index)
+            total_penalty += penalty
+
+            trap_class_key = best_signal.trap_class.value
+            trap_classes_seen.add(trap_class_key)
+            # Track the highest confidence per trap class
+            if trap_class_key not in trap_class_max_confidence:
+                trap_class_max_confidence[trap_class_key] = best_signal.confidence
+            else:
+                trap_class_max_confidence[trap_class_key] = max(
+                    trap_class_max_confidence[trap_class_key], best_signal.confidence,
+                )
+
+            signal_index += 1
+
+        # --- Asymmetry penalty ---
         if asymmetry_detected:
             asymmetry_weight = self._config.scorer_weights.get("asymmetry", 0.20)
             total_penalty += asymmetry_score * asymmetry_weight
 
-        # --- 5. Multi-signal amplification --------------------------------
-        if len(trap_classes_seen) >= 3:
-            total_penalty *= 1.3
+        # SECURITY FIX: AG-TS-002 (Adversarial Review 2025)
+        # --- Conditional multi-signal amplification ---
+        # Amplification is ONLY applied when:
+        #   1) Signals come from 3+ DIFFERENT trap classes, AND
+        #   2) At least 2 of those classes have confidence > 0.7
+        # This makes amplification much harder to trigger with noise and
+        # prevents an attacker from crafting content that triggers
+        # false positives on clean layers to dilute real detections.
+        if self._should_amplify(trap_classes_seen, trap_class_max_confidence):
+            total_penalty *= _AMPLIFICATION_FACTOR
 
-        # --- 4. Compute and clamp score -----------------------------------
+        # --- Compute and clamp score ---
         composite_score = base_score - total_penalty
         composite_score = max(0.0, min(1.0, composite_score))
 
-        # --- 6. Determine tier --------------------------------------------
+        # --- Determine tier ---
         trust_tier = self._classify_tier(composite_score)
 
         return composite_score, trust_tier
@@ -298,11 +388,54 @@ class TrustScorer:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    # SECURITY FIX: AG-TS-001 (Adversarial Review 2025)
+    def _compute_penalty(self, base_penalty: float, signal_count: int) -> float:
+        """Non-linear penalty scaling — exponential growth with signal count.
+
+        Each additional signal from a distinct detector costs more than the
+        last, making the total penalty curve non-linear and therefore much
+        harder for an attacker to calibrate against a fixed threshold.
+        """
+        # signal_count starts at 0 for the first signal.
+        # log1p(0) = 0, so the first signal always gets 1.0× base_penalty.
+        # Each subsequent signal adds ~30% more scaling than the previous.
+        return base_penalty * (1.0 + 0.3 * math.log1p(signal_count))
+
+    # SECURITY FIX: AG-TS-002 (Adversarial Review 2025)
+    def _should_amplify(
+        self,
+        trap_classes_seen: set[str],
+        trap_class_max_confidence: dict[str, float],
+    ) -> bool:
+        """Determine whether conditional multi-signal amplification applies.
+
+        Amplification is only triggered when:
+          1. Signals span 3+ *different* trap classes, AND
+          2. At least 2 of those classes carry a confidence > 0.7.
+
+        This prevents an attacker from triggering the amplification bonus
+        with low-confidence noise signals injected to dilute real detections.
+        """
+        if len(trap_classes_seen) < _AMPLIFICATION_MIN_TRAP_CLASSES:
+            return False
+
+        # Count how many distinct trap classes have high-confidence signals
+        high_conf_class_count = sum(
+            1
+            for _trap_class, max_conf in trap_class_max_confidence.items()
+            if max_conf > _AMPLIFICATION_HIGH_CONF_THRESHOLD
+        )
+
+        return high_conf_class_count >= _AMPLIFICATION_MIN_HIGH_CONF_COUNT
+
     def _classify_tier(self, score: float) -> TrustTier:
         """Map a composite score to a :class:`TrustTier`."""
-        if score >= self._config.yellow_threshold:
+        # SECURITY FIX: AG-TS-001 (Adversarial Review 2025)
+        # Uses jittered thresholds stored at instantiation time instead of
+        # the raw config values, preventing precise calibration attacks.
+        if score >= self._yellow_threshold:
             return TrustTier.GREEN
-        if score >= self._config.red_threshold:
+        if score >= self._red_threshold:
             return TrustTier.YELLOW
         if score >= 0.15:
             return TrustTier.RED

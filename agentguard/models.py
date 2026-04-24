@@ -80,6 +80,11 @@ class AgentMessage(BaseModel):
     signature: str | None = None
     trust_score: float | None = None
     verified: bool = False
+    # SECURITY FIX: AG-AT-001 (Adversarial Review 2025)
+    # Nonce and expiry fields to prevent HMAC replay attacks.
+    # Both Optional for backward compatibility with unsigned messages.
+    nonce: str | None = None
+    expires_at: datetime | None = None
 
 
 class ActionRequest(BaseModel):
