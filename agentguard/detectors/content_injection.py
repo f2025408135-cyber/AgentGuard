@@ -30,6 +30,40 @@ from agentguard.models import DetectionSignal, TrapClass
 
 logger = logging.getLogger(__name__)
 
+# SECURITY FIX: AG-CI-001 (Adversarial Review 2025)
+# Explicit homoglyph mapping for characters that NFKC does NOT normalize.
+# These characters look identical to Latin equivalents but have different codepoints.
+_HOMOGLYPH_MAP: dict[str, str] = {
+    # Cyrillic → Latin
+    "\u0456": "i",   # Cyrillic і → Latin i
+    "\u0406": "I",   # Cyrillic І → Latin I
+    "\u043E": "o",   # Cyrillic о → Latin o
+    "\u041E": "O",   # Cyrillic О → Latin O
+    "\u0440": "p",   # Cyrillic р → Latin p
+    "\u0420": "P",   # Cyrillic Р → Latin P
+    "\u0441": "s",   # Cyrillic с → Latin s (selective)
+    "\u0421": "C",   # Cyrillic С → Latin C
+    "\u0443": "y",   # Cyrillic у → Latin y
+    "\u0423": "Y",   # Cyrillic У → Latin Y
+    "\u0445": "x",   # Cyrillic х → Latin x
+    "\u0425": "X",   # Cyrillic Х → Latin X
+    "\u0430": "a",   # Cyrillic а → Latin a
+    "\u0410": "A",   # Cyrillic А → Latin A
+    "\u0435": "e",   # Cyrillic е → Latin e
+    "\u0415": "E",   # Cyrillic Е → Latin E
+    # Greek → Latin (common confusables)
+    "\u03B1": "a",   # Greek α → Latin a
+    "\u0391": "A",   # Greek Α → Latin A
+    "\u03BF": "o",   # Greek ο → Latin o
+    "\u039F": "O",   # Greek Ο → Latin O
+    # Fullwidth Latin → Latin (NFKC handles most but be explicit)
+    "\uFF49": "i",   # Fullwidth ｉ → Latin i
+    "\uFF49": "i",   # Fullwidth ｉ → Latin i
+}
+
+# Build a translation table for fast homoglyph replacement
+_HOMOGLYPH_TABLE = str.maketrans(_HOMOGLYPH_MAP)
+
 # Unicode zero-width characters used for steganographic text hiding
 _ZERO_WIDTH_CHARS = "\u200b\u200c\u200d\u2060\ufeff\u00ad"
 
@@ -104,14 +138,23 @@ class ContentInjectionDetector:
     def _normalize_text(self, text: str) -> str:
         """SECURITY FIX: AG-CI-001 (Adversarial Review 2025)
 
-        NFKC normalize to collapse Unicode homoglyphs. Cyrillic/Greek
-        characters that look identical to Latin (e.g., Cyrillic 'і' U+0456
-        vs Latin 'i') are normalized to their canonical Latin equivalents
-        before pattern matching, preventing homoglyph-based bypass.
+        Two-pass normalization to defeat homoglyph bypass attacks:
+
+        1. **Explicit homoglyph replacement**: Cyrillic/Greek characters that
+           look identical to Latin but have different codepoints are replaced
+           with their Latin equivalents via a pre-built translation table.
+           NFKC alone does NOT handle these (e.g., Cyrillic і U+0456 stays
+           as і after NFKC). We handle 20+ known confusable pairs.
+
+        2. **NFKC normalization**: Collapses fullwidth, compatibility, and
+           composed/decomposed variants that NFKC *does* handle.
         """
         if not text:
             return text
         try:
+            # Pass 1: Explicit homoglyph mapping (Cyrillic/Greek → Latin)
+            text = text.translate(_HOMOGLYPH_TABLE)
+            # Pass 2: NFKC normalization (fullwidth, compatibility chars)
             return unicodedata.normalize('NFKC', text)
         except Exception:
             return text
