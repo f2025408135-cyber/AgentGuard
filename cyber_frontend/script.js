@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const texts = [
         "Initializing secure connection...",
         "Bypassing mainframe firewalls...",
-        "Access granted. Welcome to LHR_CYBER.",
+        "Access granted. Welcome to SULKUR GROUP.",
         "Learn to defend. Learn to attack.",
         "Master the matrix."
     ];
