@@ -3,165 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SULKUR GROUP | Master the Matrix</title>
+    <title>SULKUR GROUP | Next-Gen Cyber Operations</title>
     <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;800&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Three.js for 3D rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-    <div id="particles-js"></div>
+    <!-- 3D Canvas Background -->
+    <canvas id="webgl-canvas"></canvas>
 
-    <header class="navbar">
-        <div class="logo">
-            <span class="glitch" data-text="SULKUR GROUP">SULKUR GROUP</span>
-        </div>
-        <nav>
-            <ul>
-                <li><a href="#home">Home</a></li>
-                <li><a href="#features">Features</a></li>
-                <li><a href="#courses">Modules</a></li>
-                <li><a href="#contact">Contact</a></li>
-            </ul>
-        </nav>
-        <div class="header-action">
-            <button class="btn-neon">Initiate_Access()</button>
-        </div>
-    </header>
-
-    <main>
-        <!-- Hero Section -->
-        <section id="home" class="hero">
-            <div class="hero-content">
-                <h1 class="glitch-title" data-text="SECURE YOUR FUTURE">SECURE YOUR FUTURE</h1>
-                <h2 class="subtitle">The Premier Cybersecurity Teaching Platform in <span class="highlight">Lahore, Pakistan</span></h2>
-                <p class="typewriter-text" id="typewriter"></p>
-                <div class="hero-buttons">
-                    <a href="#courses" class="btn-neon primary">Explore_Modules()</a>
-                    <a href="#contact" class="btn-neon secondary">Join_Network()</a>
-                </div>
+    <div class="ui-layer">
+        <header class="glass-nav">
+            <div class="logo">
+                <span class="logo-text">SULKUR GROUP</span>
+                <span class="version-tag">v2026.1</span>
             </div>
-            <div class="hero-graphic">
-                <div class="radar-scan"></div>
-            </div>
-        </section>
+            <nav>
+                <a href="#nexus" class="nav-link active">Nexus</a>
+                <a href="#training" class="nav-link">Training Matrix</a>
+                <a href="#defense" class="nav-link">Defense Systems</a>
+                <a href="#comm" class="nav-link">Secure Comm</a>
+            </nav>
+            <button class="btn-glass primary">Initialize_Link()</button>
+        </header>
 
-        <!-- Features Section -->
-        <section id="features" class="features">
-            <h2 class="section-title">> System_Features_</h2>
-            <div class="feature-grid">
-                <div class="feature-card">
-                    <div class="icon">💻</div>
-                    <h3>Hands-on Labs</h3>
-                    <p>Practice in real-world simulated environments. Hack legally, defend actively.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon">🔒</div>
-                    <h3>Offensive & Defensive</h3>
-                    <p>Learn both Red Team and Blue Team strategies to become a complete professional.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon">🇵🇰</div>
-                    <h3>Local Industry Focus</h3>
-                    <p>Curriculum tailored for the Pakistani IT sector and global remote opportunities.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon">🏆</div>
-                    <h3>CTF Challenges</h3>
-                    <p>Participate in regular Capture The Flag events against other students in Lahore.</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- Courses Section -->
-        <section id="courses" class="courses">
-            <h2 class="section-title">> Training_Modules_</h2>
-            <div class="course-grid">
-                <div class="course-card">
-                    <div class="course-header">
-                        <span class="badge red">Red Team</span>
-                        <h3>Ethical Hacking 101</h3>
-                    </div>
-                    <p>Master the fundamentals of penetration testing, vulnerability assessment, and exploit development.</p>
-                    <ul class="course-list">
-                        <li>> Nmap & Reconnaissance</li>
-                        <li>> Metasploit Framework</li>
-                        <li>> Privilege Escalation</li>
-                    </ul>
-                    <button class="btn-outline">Enroll_Now()</button>
-                </div>
-                <div class="course-card">
-                    <div class="course-header">
-                        <span class="badge blue">Blue Team</span>
-                        <h3>SOC Analyst Bootcamp</h3>
-                    </div>
-                    <p>Learn to detect, analyze, and respond to cybersecurity incidents in real-time.</p>
-                    <ul class="course-list">
-                        <li>> SIEM Operations</li>
-                        <li>> Network Traffic Analysis</li>
-                        <li>> Incident Response</li>
-                    </ul>
-                    <button class="btn-outline">Enroll_Now()</button>
-                </div>
-                <div class="course-card">
-                    <div class="course-header">
-                        <span class="badge green">AppSec</span>
-                        <h3>Web App Security</h3>
-                    </div>
-                    <p>Discover how to secure web applications and find vulnerabilities like SQLi and XSS.</p>
-                    <ul class="course-list">
-                        <li>> OWASP Top 10</li>
-                        <li>> Burp Suite Mastery</li>
-                        <li>> Secure Coding Practices</li>
-                    </ul>
-                    <button class="btn-outline">Enroll_Now()</button>
-                </div>
-            </div>
-        </section>
-
-        <!-- Contact Section -->
-        <section id="contact" class="contact">
-            <div class="terminal-window">
-                <div class="terminal-header">
-                    <div class="terminal-buttons">
-                        <span class="close"></span>
-                        <span class="minimize"></span>
-                        <span class="maximize"></span>
-                    </div>
-                    <div class="terminal-title">root@sulkur-group:~# contact_us</div>
-                </div>
-                <div class="terminal-body">
-                    <p class="prompt">root@sulkur-group:~# ./establish_connection.sh</p>
-                    <form id="contact-form">
-                        <div class="form-group">
-                            <label for="name">> Enter_Alias:</label>
-                            <input type="text" id="name" required placeholder="Anonymous">
-                        </div>
-                        <div class="form-group">
-                            <label for="email">> Enter_Comm_Link (Email):</label>
-                            <input type="email" id="email" required placeholder="user@domain.com">
-                        </div>
-                        <div class="form-group">
-                            <label for="message">> Enter_Payload (Message):</label>
-                            <textarea id="message" required placeholder="Transmit your message here..."></textarea>
-                        </div>
-                        <button type="submit" class="btn-terminal">Execute_Payload()</button>
-                    </form>
-                    <div id="terminal-response" class="hidden">
-                        <p class="success-text">> Payload delivered successfully. Awaiting response...</p>
+        <main>
+            <section id="nexus" class="hero-section">
+                <div class="hero-card glass-panel">
+                    <div class="badge-2026">NEXT-GEN SEC_OPS</div>
+                    <h1 class="hero-title">Elevate Your <br><span class="text-gradient">Cyber Reality</span></h1>
+                    <p class="hero-desc">
+                        The ultimate teaching platform for cybersecurity professionals in Lahore, Pakistan. Step into the 2026 training matrix.
+                    </p>
+                    <div class="action-group">
+                        <button class="btn-solid">Enter Simulation</button>
+                        <button class="btn-glass">View Intel</button>
                     </div>
                 </div>
-            </div>
-        </section>
-    </main>
 
-    <footer>
-        <div class="footer-content">
-            <p>&copy; 2024 SULKUR GROUP. Developed in Lahore, Pakistan.</p>
-            <p class="system-status">System Status: <span class="online">ONLINE</span> | Secure Connection Established</p>
-        </div>
-    </footer>
+                <div class="stats-container">
+                    <div class="stat-card glass-panel">
+                        <span class="stat-value text-gradient">99.9%</span>
+                        <span class="stat-label">Threat Detection</span>
+                    </div>
+                    <div class="stat-card glass-panel">
+                        <span class="stat-value text-gradient">0ms</span>
+                        <span class="stat-label">Latency Ops</span>
+                    </div>
+                    <div class="stat-card glass-panel">
+                        <span class="stat-value text-gradient">3D</span>
+                        <span class="stat-label">Spatial Training</span>
+                    </div>
+                </div>
+            </section>
 
-    <!-- Particles.js for background effects -->
-    <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
+            <section id="training" class="modules-section">
+                <h2 class="section-title">Immersive <span class="text-gradient">Modules</span></h2>
+                <div class="cards-grid">
+                    <div class="module-card glass-panel interactive">
+                        <div class="card-icon red-glow"></div>
+                        <h3>Offensive Ops (Red)</h3>
+                        <p>Next-gen exploitation techniques and AI-assisted penetration testing within virtual environments.</p>
+                    </div>
+                    <div class="module-card glass-panel interactive">
+                        <div class="card-icon blue-glow"></div>
+                        <h3>Defensive Grid (Blue)</h3>
+                        <p>Predictive threat modeling, automated SOC operations, and real-time incident response simulations.</p>
+                    </div>
+                    <div class="module-card glass-panel interactive">
+                        <div class="card-icon purple-glow"></div>
+                        <h3>Quantum AppSec</h3>
+                        <p>Securing modern decentralized applications and post-quantum cryptographic implementations.</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>
