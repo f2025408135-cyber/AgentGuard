@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SULKUR GROUP | Next-Gen Cyber Operations</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;800&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Three.js for 3D rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <!-- 3D Canvas Background -->
+    <canvas id="webgl-canvas"></canvas>
+
+    <div class="ui-layer">
+        <header class="glass-nav">
+            <div class="logo">
+                <span class="logo-text">SULKUR GROUP</span>
+                <span class="version-tag">v2026.1</span>
+            </div>
+            <nav>
+                <a href="#nexus" class="nav-link active">Nexus</a>
+                <a href="#training" class="nav-link">Training Matrix</a>
+                <a href="#defense" class="nav-link">Defense Systems</a>
+                <a href="#comm" class="nav-link">Secure Comm</a>
+            </nav>
+            <button class="btn-glass primary">Initialize_Link()</button>
+        </header>
+
+        <main>
+            <section id="nexus" class="hero-section">
+                <div class="hero-card glass-panel">
+                    <div class="badge-2026">NEXT-GEN SEC_OPS</div>
+                    <h1 class="hero-title">Elevate Your <br><span class="text-gradient">Cyber Reality</span></h1>
+                    <p class="hero-desc">
+                        The ultimate teaching platform for cybersecurity professionals in Lahore, Pakistan. Step into the 2026 training matrix.
+                    </p>
+                    <div class="action-group">
+                        <button class="btn-solid">Enter Simulation</button>
+                        <button class="btn-glass">View Intel</button>
+                    </div>
+                </div>
+
+                <div class="stats-container">
+                    <div class="stat-card glass-panel">
+                        <span class="stat-value text-gradient">99.9%</span>
+                        <span class="stat-label">Threat Detection</span>
+                    </div>
+                    <div class="stat-card glass-panel">
+                        <span class="stat-value text-gradient">0ms</span>
+                        <span class="stat-label">Latency Ops</span>
+                    </div>
+                    <div class="stat-card glass-panel">
+                        <span class="stat-value text-gradient">3D</span>
+                        <span class="stat-label">Spatial Training</span>
+                    </div>
+                </div>
+            </section>
+
+            <section id="training" class="modules-section">
+                <h2 class="section-title">Immersive <span class="text-gradient">Modules</span></h2>
+                <div class="cards-grid">
+                    <div class="module-card glass-panel interactive">
+                        <div class="card-icon red-glow"></div>
+                        <h3>Offensive Ops (Red)</h3>
+                        <p>Next-gen exploitation techniques and AI-assisted penetration testing within virtual environments.</p>
+                    </div>
+                    <div class="module-card glass-panel interactive">
+                        <div class="card-icon blue-glow"></div>
+                        <h3>Defensive Grid (Blue)</h3>
+                        <p>Predictive threat modeling, automated SOC operations, and real-time incident response simulations.</p>
+                    </div>
+                    <div class="module-card glass-panel interactive">
+                        <div class="card-icon purple-glow"></div>
+                        <h3>Quantum AppSec</h3>
+                        <p>Securing modern decentralized applications and post-quantum cryptographic implementations.</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentGuard — AI Agent Trap Defense</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="hero">
+            <div class="shield-icon">&#x1F6E1;&#xFE0F;</div>
+            <h1>AgentGuard</h1>
+            <p class="tagline">Defense framework against AI Agent Traps</p>
+            <p class="version">v0.1.0 &middot; 10 defense layers &middot; 6 trap classes</p>
+        </header>
+
+        <!-- Trap Classes -->
+        <section class="card trap-classes">
+            <h2>Six Attack Categories</h2>
+            <div class="trap-grid">
+                <div class="trap-card">
+                    <h3>Content Injection</h3>
+                    <p>Hidden HTML/CSS traps invisible to human eyes but readable by agents parsing page content.</p>
+                </div>
+                <div class="trap-card">
+                    <h3>Semantic Manipulation</h3>
+                    <p>Authority framing, urgency cues, and jailbreak prompts that exploit agent instruction-following.</p>
+                </div>
+                <div class="trap-card">
+                    <h3>Cognitive State</h3>
+                    <p>Exploits targeting the agent's cognitive context, working memory, or attention mechanisms.</p>
+                </div>
+                <div class="trap-card">
+                    <h3>Behavioral Control</h3>
+                    <p>Traps that coerce agents into performing unintended actions like data exfiltration.</p>
+                </div>
+                <div class="trap-card">
+                    <h3>Systemic</h3>
+                    <p>Supply-chain and infrastructure-level attacks including poisoned memory and compromised APIs.</p>
+                </div>
+                <div class="trap-card">
+                    <h3>Human-in-Loop</h3>
+                    <p>Attacks targeting the approval workflow by overwhelming or deceiving human supervisors.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- URL Scanner -->
+        <section class="card scanner-card">
+            <h2>Scan a URL</h2>
+            <p class="card-desc">Fetch and analyze any URL for AI agent traps through all 10 defense layers.</p>
+            <form id="url-form" class="scan-form">
+                <div class="input-row">
+                    <input type="url" id="url-input" placeholder="https://example.com" required autocomplete="off">
+                    <button type="submit" class="btn btn-primary" id="url-btn">
+                        <span class="btn-text">Scan URL</span>
+                        <span class="spinner" id="url-spinner"></span>
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Text Scanner -->
+        <section class="card scanner-card">
+            <h2>Scan Text</h2>
+            <p class="card-desc">Analyze raw text content for injection patterns and semantic manipulation.</p>
+            <form id="text-form" class="scan-form">
+                <textarea id="text-input" rows="5" placeholder="Paste any text content here to scan for agent traps..."></textarea>
+                <div class="input-row" style="margin-top: 0.5rem;">
+                    <div></div>
+                    <button type="submit" class="btn btn-primary" id="text-btn">
+                        <span class="btn-text">Scan Text</span>
+                        <span class="spinner" id="text-spinner"></span>
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Document Upload -->
+        <section class="card scanner-card">
+            <h2>Scan Document</h2>
+            <p class="card-desc">Upload a file (PDF, Excel, ICS, HTML, images) for trap analysis.</p>
+            <form id="doc-form" class="scan-form" enctype="multipart/form-data">
+                <div class="upload-area" id="upload-area">
+                    <input type="file" id="file-input" accept=".pdf,.xlsx,.xls,.ics,.html,.htm,.png,.jpg,.jpeg,.bmp,.gif">
+                    <label for="file-input" class="upload-label">
+                        <span id="file-name">Click or drag to upload a file</span>
+                    </label>
+                </div>
+                <div class="input-row" style="margin-top: 0.5rem;">
+                    <div></div>
+                    <button type="submit" class="btn btn-primary" id="doc-btn">
+                        <span class="btn-text">Scan Document</span>
+                        <span class="spinner" id="doc-spinner"></span>
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Live Attack Demo -->
+        <section class="card demo-card">
+            <h2>Live Attack Demo</h2>
+            <p class="card-desc">Scan our pre-built malicious test page that contains hidden injections, steganography, authority framing, and more.</p>
+            <div class="demo-actions">
+                <a href="/attack-demo" target="_blank" class="btn btn-secondary">View Attack Page &rarr;</a>
+                <button class="btn btn-danger" id="attack-demo-btn">
+                    <span class="btn-text">Scan Attack Page</span>
+                    <span class="spinner" id="attack-spinner"></span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Results Panel -->
+        <section class="card results-card" id="results-panel" style="display: none;">
+            <div class="results-header">
+                <h2>Scan Results</h2>
+                <button class="btn btn-small" id="close-results">&times;</button>
+            </div>
+            <div id="results-content"></div>
+        </section>
+
+        <!-- Footer -->
+        <footer>
+            <p>AgentGuard &copy; 2025 &middot; Based on <em>Franklin et al. (2026). AI Agent Traps. SSRN 6372438.</em></p>
+        </footer>
+    </div>
+
+    <script>
+        const resultsPanel = document.getElementById('results-panel');
+        const resultsContent = document.getElementById('results-content');
+
+        document.getElementById('close-results').addEventListener('click', () => {
+            resultsPanel.style.display = 'none';
+        });
+
+        function setSpinner(btnId, spinnerId, active) {
+            const btn = document.getElementById(btnId);
+            const spinner = document.getElementById(spinnerId);
+            const text = btn.querySelector('.btn-text');
+            if (active) {
+                btn.disabled = true;
+                spinner.classList.add('active');
+                text.style.opacity = '0';
+            } else {
+                btn.disabled = false;
+                spinner.classList.remove('active');
+                text.style.opacity = '1';
+            }
+        }
+
+        function showResults(data) {
+            resultsPanel.style.display = 'block';
+            resultsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            const tier = (data.trust_tier || 'UNKNOWN').toUpperCase();
+            const score = data.composite_score !== undefined ? data.composite_score.toFixed(3) : 'N/A';
+            const signals = data.signals || [];
+
+            let tierClass = 'tier-green';
+            if (tier === 'YELLOW') tierClass = 'tier-yellow';
+            else if (tier === 'RED') tierClass = 'tier-red';
+            else if (tier === 'QUARANTINE') tierClass = 'tier-quarantine';
+
+            let html = `
+                <div class="result-summary ${tierClass}">
+                    <div class="result-tier">${tier}</div>
+                    <div class="result-score">Trust Score: ${score}</div>
+                    <div class="result-signals">Signals: ${signals.length}</div>
+                </div>
+            `;
+
+            if (data.url) {
+                html += `<div class="result-url">URL: <code>${escapeHtml(data.url)}</code></div>`;
+            }
+            if (data.asymmetry_detected) {
+                html += `<div class="result-asymmetry">&#9888; Detection asymmetry found: ${escapeHtml(data.asymmetry_diff_summary || 'yes')}</div>`;
+            }
+
+            if (signals.length > 0) {
+                html += `<div class="signals-list">`;
+                html += `<h3>Detection Signals</h3>`;
+                signals.sort((a, b) => b.confidence - a.confidence);
+                for (const sig of signals) {
+                    const conf = sig.confidence;
+                    let confClass = 'signal-low';
+                    if (conf > 0.7) confClass = 'signal-high';
+                    else if (conf > 0.4) confClass = 'signal-medium';
+
+                    html += `
+                        <div class="signal-card ${confClass}">
+                            <div class="signal-header">
+                                <span class="signal-name">${escapeHtml(sig.signal_name)}</span>
+                                <span class="signal-confidence">${conf.toFixed(2)}</span>
+                                <span class="signal-class">${escapeHtml(sig.trap_class)}</span>
+                            </div>
+                            <div class="signal-evidence">${escapeHtml(sig.evidence)}</div>
+                        </div>
+                    `;
+                }
+                html += `</div>`;
+            } else {
+                html += `<div class="no-signals">&#9989; No suspicious signals detected. Content appears clean.</div>`;
+            }
+
+            resultsContent.innerHTML = html;
+        }
+
+        function showError(message) {
+            resultsPanel.style.display = 'block';
+            resultsContent.innerHTML = `<div class="error-msg">&#10060; ${escapeHtml(message)}</div>`;
+            resultsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // URL Scan
+        document.getElementById('url-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const url = document.getElementById('url-input').value.trim();
+            if (!url) return;
+            setSpinner('url-btn', 'url-spinner', true);
+            try {
+                const resp = await fetch('/api/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+                const data = await resp.json();
+                if (resp.ok) showResults(data);
+                else showError(data.error || 'Scan failed');
+            } catch (err) {
+                showError(err.message);
+            }
+            setSpinner('url-btn', 'url-spinner', false);
+        });
+
+        // Text Scan
+        document.getElementById('text-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = document.getElementById('text-input').value.trim();
+            if (!text) return;
+            setSpinner('text-btn', 'text-spinner', true);
+            try {
+                const resp = await fetch('/api/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+                const data = await resp.json();
+                if (resp.ok) showResults(data);
+                else showError(data.error || 'Scan failed');
+            } catch (err) {
+                showError(err.message);
+            }
+            setSpinner('text-btn', 'text-spinner', false);
+        });
+
+        // Document Scan
+        document.getElementById('doc-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('file-input');
+            if (!fileInput.files.length) {
+                showError('Please select a file to upload.');
+                return;
+            }
+            setSpinner('doc-btn', 'doc-spinner', true);
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            try {
+                const resp = await fetch('/api/scan-document', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await resp.json();
+                if (resp.ok) showResults(data);
+                else showError(data.error || 'Scan failed');
+            } catch (err) {
+                showError(err.message);
+            }
+            setSpinner('doc-btn', 'doc-spinner', false);
+        });
+
+        // File name display
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            const name = e.target.files.length ? e.target.files[0].name : 'Click or drag to upload a file';
+            document.getElementById('file-name').textContent = name;
+        });
+
+        // Attack Demo Scan
+        document.getElementById('attack-demo-btn').addEventListener('click', async () => {
+            setSpinner('attack-demo-btn', 'attack-spinner', true);
+            try {
+                const resp = await fetch('/api/scan-attack-demo');
+                const data = await resp.json();
+                if (resp.ok) showResults(data);
+                else showError(data.error || 'Scan failed');
+            } catch (err) {
+                showError(err.message);
+            }
+            setSpinner('attack-demo-btn', 'attack-spinner', false);
+        });
+    </script>
+</body>
+</html>
